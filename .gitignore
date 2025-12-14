@@ -22,3 +22,6 @@ CMakeUserPresets.json
 /cmake-build-debug/
 /.venv/
 /.idea
+*.o
+*.iso
+*.bin
