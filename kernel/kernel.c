@@ -86,7 +86,7 @@ void _start() {
     console_write("Simple OS\nType 'help'\n\n");
 
 
-	init_commands();
+//	init_commands();
 
     char input[READLINE_BUFFER];
     char* argv[MAX_ARGS];
@@ -94,7 +94,6 @@ void _start() {
 
     while (true) {
         readline(input, READLINE_BUFFER);   // Read full line with editing, history, arrows
-        console_write(input);
         if (kstrlen(input) == 0)
             continue;
 
@@ -102,7 +101,7 @@ void _start() {
         argc = split_args(input, argv, MAX_ARGS);
 
         // Execute command
-        execute_command(argc, argv);
+//        execute_command(argc, argv);
 
 		for (int i = 0; i < READLINE_BUFFER; i++) input[i] = 0;
 
