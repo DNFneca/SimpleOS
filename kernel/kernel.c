@@ -1,44 +1,43 @@
-#include <string.h>
-#include <stdlib.h>
+#include <stdint.h>
 #include <stdbool.h>
-#include "../include/console.h"
-#include "../include/keyboard.h"
 #include "../include/readline.h"
-#include "../include/registry.h"
+#include "../include/console.h"
+
 
 #define MAX_ARGS 16
 
-__attribute__((section(".multiboot2_header")))
-const unsigned long multiboot2_header[] =
-{
-    // magic number
-    0xe85250d6,
-    // architecture: 0 = 32-bit i386
-    0x00000000,
-    // header length
-    24,
-    // checksum (magic + arch + length + checksum = 0)
-    -(0xe85250d6 + 0x00000000 + 24),
-
-    // end tag
-    0x00000000,
-    0x00000000
+struct multiboot_tag {
+    uint32_t type;
+    uint32_t size;
 };
+
+struct multiboot_tag_framebuffer {
+    uint32_t type;
+    uint32_t size;
+    uint64_t addr;
+    uint32_t pitch;
+    uint32_t width;
+    uint32_t height;
+    uint8_t bpp;
+    uint8_t fb_type;
+    uint16_t reserved;
+};
+
 
 extern void init_commands();
 extern void execute_command(int argc, char* argv[]);
 
-
 static inline uint8_t inb(uint16_t port) {
-    uint8_t r;
-    __asm__ volatile ("inb %1, %0" : "=a"(r) : "dN"(port));
-    return r;
+uint8_t r;
+__asm__ volatile ("inb %1, %0" : "=a"(r) : "dN"(port));
+return r;
 }
 
+static inline void outb(uint16_t port, uint8_t val) {
+    __asm__ volatile ("outb %0, %1" : : "a"(val), "dN"(port));
+}
 
 void wait_key(char* out) {
-    // Uses BIOS/keyboard buffer via port I/O
-    // This polling method works under GRUB
     while (1) {
         uint8_t status = inb(0x64);
         if (status & 1) {
@@ -63,47 +62,76 @@ int split_args(char* line, char** argv, int max_args) {
     char* p = line;
 
     while (*p != '\0') {
-        // Skip leading spaces
         while (*p == ' ') p++;
-
         if (*p == '\0') break;
 
-        // Start of argument
         argv[argc++] = p;
         if (argc >= max_args) break;
 
-        // Find end of argument
         while (*p != '\0' && *p != ' ') p++;
-
-        if (*p == ' ') *p++ = '\0'; // null-terminate argument
+        if (*p == ' ') *p++ = '\0';
     }
 
     return argc;
 }
 
-void _start() {
+//void kernel_main(uint64_t magic, uint64_t mbi) {
+//    (void)magic;
+//
+//    struct multiboot_tag* tag = (struct multiboot_tag*)(mbi + 8);
+//    struct multiboot_tag_framebuffer* fb = 0;
+//
+//    while (tag->type) {
+//        if (tag->type == 8) {
+//            fb = (struct multiboot_tag_framebuffer*)tag;
+//            break;
+//        }
+//        tag = (struct multiboot_tag*)((uint8_t*)tag + ((tag->size + 7) & ~7));
+//    }
+//
+//    if (!fb)
+//        for (;;) __asm__("hlt");
+//
+//    uint32_t* buffer = (uint32_t*)(uint64_t)fb->addr;
+//    uint32_t pitch = fb->pitch / 4;
+//
+//    // Clear screen
+//    for (uint32_t y = 0; y < fb->height; y++)
+//        for (uint32_t x = 0; x < fb->width; x++)
+//            buffer[y * pitch + x] = 0x000000;
+//
+//    // White box
+//    for (uint32_t y = 100; y < 200; y++)
+//        for (uint32_t x = 100; x < 400; x++)
+//            buffer[y * pitch + x] = 0xFFFFFF;
+//}
+
+void kernel_main() {
     console_init();
-    console_write("Simple OS\nType 'help'\n\n");
 
+    printf("Hello, World!\n");
+    printf("Number: %d\n", 42);
+    printf("Hex: 0x%x\n", 255);
+    printf("String: %s\n", "Hello");
+    printf("Character: %c\n", 'A');
+    printf("Pointer: %p\n", 0xDEADBEEF);
+//    console_write("Simple OS - 64-bit Long Mode via GRUB\n");
+//    console_write("Type 'help'\n\n");
 
-//	init_commands();
-
-    char input[READLINE_BUFFER];
-    char* argv[MAX_ARGS];
-    int argc;
-
-    while (true) {
-        readline(input, READLINE_BUFFER);   // Read full line with editing, history, arrows
-        if (kstrlen(input) == 0)
-            continue;
-
-        // Split input into args
-        argc = split_args(input, argv, MAX_ARGS);
-
-        // Execute command
-//        execute_command(argc, argv);
-
-		for (int i = 0; i < READLINE_BUFFER; i++) input[i] = 0;
-
-    }
+//    // init_commands();
+//
+//    char input[READLINE_BUFFER];
+//    char* argv[MAX_ARGS];
+//    int argc;
+//
+//    while (true) {
+//        readline(input, READLINE_BUFFER);
+//        if (kstrlen(input) == 0)
+//            continue;
+//
+//        argc = split_args(input, argv, MAX_ARGS);
+//        // execute_command(argc, argv);
+//
+//        for (int i = 0; i < READLINE_BUFFER; i++) input[i] = 0;
+//    }
 }

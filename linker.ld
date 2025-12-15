@@ -2,13 +2,14 @@ ENTRY(_start)
 
 SECTIONS
 {
-  . = 1M;
+    . = 1M;  /* Load kernel at 1 MB */
 
-  .multiboot2_header : {
-    *(.multiboot2_header)
-  }
+    .text : {
+        *(.multiboot)
+        *(.text)
+    }
 
-  .text : {
-    *(.text*)
-  }
+    .rodata : { *(.rodata) }
+    .data   : { *(.data) }
+    .bss    : { *(.bss COMMON) }
 }

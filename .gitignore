@@ -25,3 +25,5 @@ CMakeUserPresets.json
 *.o
 *.iso
 *.bin
+/iso/
+*.elf

@@ -1,24 +1,45 @@
 CC = gcc
-CFLAGS = -m32 -ffreestanding -O2 -Wall -Wextra
+AS = nasm
 LD = ld
-LDFLAGS = -m elf_i386
 
-SRC = kernel/kernel.c kernel/console.c kernel/string.c kernel/keyboard.c kernel/readline.c kernel/memory.c
-OBJ = $(SRC:.c=.o)
+CFLAGS = -m64 -ffreestanding -O2 -Wall -Wextra
+LDFLAGS = -n -T linker.ld
 
-all: kernel.bin
+# Find all C and ASM files
+C_SRC  := $(wildcard kernel/*.c)
+ASM_SRC:= $(wildcard kernel/*.asm)
 
-kernel.bin: $(OBJ) linker.ld
-	$(LD) $(LDFLAGS) -T linker.ld -o $@ $(OBJ)
+# Convert source files to object files
+C_OBJ  := $(C_SRC:.c=.o)
+ASM_OBJ:= $(ASM_SRC:.asm=.o)
 
-run: iso
-	qemu-system-i386 -cdrom myos.iso -boot d
+OBJ := $(C_OBJ) $(ASM_OBJ)
 
-iso: kernel.bin
+all: iso
+
+# Assemble ASM files
+kernel/%.o: kernel/%.asm
+	$(AS) -f elf64 $< -o $@
+
+# Compile C files
+kernel/%.o: kernel/%.c
+	$(CC) $(CFLAGS) -c $< -o $@
+
+# Link kernel
+kernel.elf: $(OBJ)
+	$(LD) $(LDFLAGS) $^ -o $@
+
+# Build ISO
+iso: kernel.elf
 	mkdir -p iso/boot/grub
-	cp kernel.bin iso/boot/
-	cp boot/grub.cfg iso/boot/grub/
-	grub-mkrescue -o myos.iso iso/
+	cp kernel.elf iso/boot/kernel.elf
+	cp boot/grub/grub.cfg iso/boot/grub/grub.cfg
+	grub-mkrescue -o os.iso iso
 
+# Run in QEMU
+run: iso
+	qemu-system-x86_64 -cdrom os.iso -boot d -no-reboot -d int,guest_errors
+
+# Clean
 clean:
-	rm -rf *.o kernel/*.o iso kernel.bin myos.iso
+	rm -rf iso kernel/*.o kernel.elf os.iso
