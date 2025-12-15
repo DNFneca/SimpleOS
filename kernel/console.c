@@ -15,6 +15,9 @@ static size_t terminal_column;
 static uint8_t terminal_color;
 static uint16_t* terminal_buffer;
 
+static size_t row = 0;
+static size_t col = 0;
+
 // Helper functions
 static inline uint8_t vga_entry_color(uint8_t fg, uint8_t bg) {
 return fg | bg << 4;
@@ -29,11 +32,15 @@ uint8_t console_makecolor(enum vga_color fg, enum vga_color bg) {
 }
 
 void console_init(void) {
-    terminal_row = 0;
-    terminal_column = 0;
-    terminal_color = vga_entry_color(7, 0); // Light grey on black
-    terminal_buffer = (uint16_t*) VGA_MEMORY;
-    console_clear();
+    uint16_t* vga = VGA_MEMORY;
+    uint16_t blank = vga_entry(' ', 0x0F);
+
+    for (size_t i = 0; i < VGA_WIDTH * VGA_HEIGHT; i++) {
+        vga[i] = blank;
+    }
+
+    row = 0;
+    col = 0;
 }
 
 void console_clear(void) {

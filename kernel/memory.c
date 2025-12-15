@@ -1,6 +1,8 @@
 #include "../include/memory.h"
 #include "../include/string.h"  // Assuming you have strcmp, you also need memset/memcpy
 
+#define ALIGN_UP(x, a) (((x) + (a - 1)) & ~(a - 1))
+
 // Global pointer to the head of the FREE list
 static heap_block_t* free_list_head = NULL;
 
@@ -16,16 +18,18 @@ void heap_init() {
     free_list_head->prev = NULL;
 
     // Optional: Clear the entire heap memory to zero
-    // memset((void*)HEAP_START_ADDRESS, 0, HEAP_SIZE);
+    memset((void*)HEAP_START_ADDRESS, 0, HEAP_SIZE);
 }
 
 // --- MALLOC Implementation (First-Fit Algorithm) ---
 void* malloc(size_t size) {
     if (size == 0) return NULL;
 
+    size = ALIGN_UP(size, 16);
+
     // The block must be large enough for the requested data PLUS the block header
     // We add the size of the header and align it (e.g., to 4 bytes) for safety
-    size_t total_required_size = size + sizeof(heap_block_t);
+    size_t total_required_size = size + ALIGN_UP(sizeof(heap_block_t), 16);
 
     // 1. Search the free list for a suitable block (First-Fit)
     heap_block_t* current = free_list_head;

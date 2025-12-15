@@ -2,22 +2,24 @@
 #include <stdbool.h>
 #include "../include/readline.h"
 #include "../include/console.h"
+#include "../include/memory.h"
+#include "../include/paging.h"
 
 
 #define MAX_ARGS 16
 
 struct multiboot_tag {
-    uint32_t type;
-    uint32_t size;
+    uint64_t type;
+    uint64_t size;
 };
 
 struct multiboot_tag_framebuffer {
-    uint32_t type;
-    uint32_t size;
+    uint64_t type;
+    uint64_t size;
     uint64_t addr;
-    uint32_t pitch;
-    uint32_t width;
-    uint32_t height;
+    uint64_t pitch;
+    uint64_t width;
+    uint64_t height;
     uint8_t bpp;
     uint8_t fb_type;
     uint16_t reserved;
@@ -25,6 +27,7 @@ struct multiboot_tag_framebuffer {
 
 
 extern void init_commands();
+extern static inline void enable_paging(void);
 extern void execute_command(int argc, char* argv[]);
 
 static inline uint8_t inb(uint16_t port) {
@@ -92,23 +95,27 @@ int split_args(char* line, char** argv, int max_args) {
 //    if (!fb)
 //        for (;;) __asm__("hlt");
 //
-//    uint32_t* buffer = (uint32_t*)(uint64_t)fb->addr;
-//    uint32_t pitch = fb->pitch / 4;
+//    uint64_t* buffer = (uint64_t*)(uint64_t)fb->addr;
+//    uint64_t pitch = fb->pitch / 4;
 //
 //    // Clear screen
-//    for (uint32_t y = 0; y < fb->height; y++)
-//        for (uint32_t x = 0; x < fb->width; x++)
+//    for (uint64_t y = 0; y < fb->height; y++)
+//        for (uint64_t x = 0; x < fb->width; x++)
 //            buffer[y * pitch + x] = 0x000000;
 //
 //    // White box
-//    for (uint32_t y = 100; y < 200; y++)
-//        for (uint32_t x = 100; x < 400; x++)
+//    for (uint64_t y = 100; y < 200; y++)
+//        for (uint64_t x = 100; x < 400; x++)
 //            buffer[y * pitch + x] = 0xFFFFFF;
 //}
 
 void kernel_main() {
     console_init();
+    enable_paging();
 
+    heap_init();
+
+    uint32_t* x = malloc(sizeof(int32_t));
     printf("Hello, World!\n");
     printf("Number: %d\n", 42);
     printf("Hex: 0x%x\n", 255);
