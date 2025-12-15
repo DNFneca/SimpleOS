@@ -95,7 +95,7 @@ void readline(char* buffer, int max) {
         // ENTER
         if (c == '\n') {
             console_putc('\n');
-            buffer[len] = 0;
+            buffer[len] = '\0';
             add_history(buffer);
             return;
         }

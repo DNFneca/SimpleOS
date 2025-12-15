@@ -4,7 +4,8 @@
 #include "../include/console.h"
 #include "../include/keyboard.h"
 #include "../include/readline.h"
-#include "../include/registry.h"
+#include "../include/memory.h"
+#include "../include/gdt.h"
 
 #define MAX_ARGS 16
 
@@ -82,29 +83,39 @@ int split_args(char* line, char** argv, int max_args) {
 }
 
 void _start() {
+
+    heap_init();
+
     console_init();
     console_write("Simple OS\nType 'help'\n\n");
 
-
-	init_commands();
 
     char input[READLINE_BUFFER];
     char* argv[MAX_ARGS];
     int argc;
 
+    int8_t first = malloc(sizeof(int8_t));
+    int8_t second = malloc(sizeof(int8_t));
+    int8_t third = malloc(sizeof(int8_t));
+    int8_t fourth = malloc(sizeof(int8_t));
+
+    console_write((char*) &first);
+    console_write((char*) &second);
+    console_write((char*) &third);
+    console_write((char*) &fourth);
+
+    free(second);
+    free(third);
+    int16_t tf = malloc(sizeof(tf));
+
+    console_write((char*) &tf);
+
     while (true) {
-        readline(input, READLINE_BUFFER);   // Read full line with editing, history, arrows
-        console_write(input);
+        readline(input, READLINE_BUFFER);
         if (kstrlen(input) == 0)
             continue;
 
         // Split input into args
         argc = split_args(input, argv, MAX_ARGS);
-
-        // Execute command
-        execute_command(argc, argv);
-
-		for (int i = 0; i < READLINE_BUFFER; i++) input[i] = 0;
-
     }
 }

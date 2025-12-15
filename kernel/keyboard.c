@@ -60,6 +60,7 @@ char keyboard_get_char() {
     // Polling loop must only read when data is available
     while (!keyboard_has_char()) {
         // Simple busy wait
+        continue;
     }
 
     uint8_t scancode = inb(KEYBOARD_INPUT_BUFFER);

@@ -16,7 +16,7 @@ void heap_init() {
     free_list_head->prev = NULL;
 
     // Optional: Clear the entire heap memory to zero
-    // memset((void*)HEAP_START_ADDRESS, 0, HEAP_SIZE);
+//    memset((void*)HEAP_START_ADDRESS, 0, HEAP_SIZE);
 }
 
 // --- MALLOC Implementation (First-Fit Algorithm) ---
@@ -24,17 +24,16 @@ void* malloc(size_t size) {
     if (size == 0) return NULL;
 
     // The block must be large enough for the requested data PLUS the block header
-    // We add the size of the header and align it (e.g., to 4 bytes) for safety
     size_t total_required_size = size + sizeof(heap_block_t);
 
     // 1. Search the free list for a suitable block (First-Fit)
-    heap_block_t* current = free_list_head;
-    heap_block_t* best_fit = NULL;
+    heap_block_t *current = free_list_head;
+    heap_block_t *best_fit = NULL;
 
     while (current != NULL) {
         if (current->is_free && current->size >= total_required_size) {
             best_fit = current;
-            break; // First-Fit: take the first one found
+            break;
         }
         current = current->next;
     }
@@ -48,32 +47,7 @@ void* malloc(size_t size) {
     size_t remaining_size = best_fit->size - total_required_size;
 
     // Check if the remainder is large enough to hold a new header plus minimal data
-    if (remaining_size > sizeof(heap_block_t)) {
-
-        // --- Split the block ---
-
-        // 2a. Create the new free block header (the remainder)
-        heap_block_t* new_free_block = (heap_block_t*)((uintptr_t)best_fit + total_required_size);
-        new_free_block->size = remaining_size;
-        new_free_block->is_free = true;
-
-        // 2b. Insert the new free block into the free list (replace best_fit)
-        new_free_block->next = best_fit->next;
-        new_free_block->prev = best_fit->prev;
-        if (new_free_block->prev != NULL) {
-            new_free_block->prev->next = new_free_block;
-        } else {
-            // New block is the new head of the free list
-            free_list_head = new_free_block;
-        }
-        if (new_free_block->next != NULL) {
-            new_free_block->next->prev = new_free_block;
-        }
-
-        // 2c. Adjust the allocated block's size
-        best_fit->size = total_required_size;
-
-    } else {
+    if (remaining_size <= sizeof(heap_block_t)) {
         // If no split occurs, simply remove the whole block from the free list
         if (best_fit->prev != NULL) {
             best_fit->prev->next = best_fit->next;
@@ -85,13 +59,45 @@ void* malloc(size_t size) {
             best_fit->next->prev = best_fit->prev;
         }
         // Size remains best_fit->size (it includes the small remainder)
+
+        // 3. Mark the block as allocated
+        best_fit->is_free = false;
+
+        // 4. Return the usable memory address (just after the header)
+        return (void*)((uintptr_t)best_fit + sizeof(heap_block_t));
+
     }
+
+    // --- Split the block ---
+
+    // 2a. Create the new free block header (the remainder)
+    heap_block_t *new_free_block = (heap_block_t *) ((uintptr_t) best_fit + total_required_size);
+    new_free_block->size = remaining_size;
+    new_free_block->is_free = true;
+
+    // 2b. Insert the new free block into the free list (replace best_fit)
+    new_free_block->next = best_fit->next;
+    new_free_block->prev = best_fit->prev;
+    if (new_free_block->prev != NULL) {
+        new_free_block->prev->next = new_free_block;
+    } else {
+        // New block is the new head of the free list
+        free_list_head = new_free_block;
+    }
+    if (new_free_block->next != NULL) {
+        new_free_block->next->prev = new_free_block;
+    }
+
+    // 2c. Adjust the allocated block's size
+    best_fit->size = total_required_size;
+
+
 
     // 3. Mark the block as allocated
     best_fit->is_free = false;
 
     // 4. Return the usable memory address (just after the header)
-    return (void*)((uintptr_t)best_fit + sizeof(heap_block_t));
+    return (void *) ((uintptr_t) best_fit + sizeof(heap_block_t));
 }
 
 // --- FREE Implementation (Block Coalescing) ---

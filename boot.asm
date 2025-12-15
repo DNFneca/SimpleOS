@@ -1,70 +1,134 @@
-; boot.asm
-; This is a basic 32-bit protected mode bootloader
 
 
 [BITS 16]
-
+[ORG 0x7C00]
 start:
-    cli                   ; Disable interrupts
-    mov ax, 0x1000        ; Set up stack
+
+    ; --- REAL MODE TEST ---
+    mov ah, 0x0E
+    mov al, 'R'
+    int 0x10
+
+    cli
+    xor ax, ax
+    mov ds, ax
     mov ss, ax
-    mov sp, 0xFFF0
-    sti                   ; Enable interrupts
+    mov sp, 0x7C00
 
-    ; --- 1. Load the Global Descriptor Table (GDT) ---
-    lgdt [gdt_descriptor]
+    lgdt [gdt_desc]
 
-    ; --- 2. Enable Protected Mode ---
     mov eax, cr0
-    or eax, 0x1           ; Set the PE (Protection Enable) bit
+    or eax, 1
     mov cr0, eax
 
-    ; --- 3. Jump to the 32-bit code segment ---
-    jmp 0x08:protected_mode ; 0x08 is the code segment selector (see GDT)
 
+    jmp 0x08:pmode
+
+; --------------------
+; 32-bit protected mode
+; --------------------
 [BITS 32]
-protected_mode:
-    ; --- 4. Set up 32-bit Data Segments ---
-    mov ax, 0x10          ; 0x10 is the data segment selector
+pmode:
+    mov ax, 0x10
     mov ds, ax
     mov es, ax
-    mov fs, ax
-    mov gs, ax
     mov ss, ax
 
-    ; --- 5. Call the C Kernel Entry Point ---
-    extern kernel_main      ; Declare C function 'kernel_main'
-    call kernel_main
+    ; PROTECTED MODE (32-bit)
+    mov byte [0xB8000], 'P'     ; character
+    mov byte [0xB8001], 0x07    ; attribute (light grey on black)
 
-    ; --- 6. Halt the system after kernel finishes (shouldn't happen in a real OS) ---
-    cli
+    mov esp, 0x90000
+
+    call setup_paging
+
+    mov eax, cr4
+    or eax, 1 << 5       ; PAE
+    mov cr4, eax
+
+    mov ecx, 0xC0000080  ; EFER
+    rdmsr
+    or eax, 1 << 8       ; LME
+    wrmsr
+
+    mov eax, cr0
+    or eax, 1 << 31      ; PG
+    mov cr0, eax
+
+    jmp 0x18:long_mode
+
+; --------------------
+; Paging (2MB identity)
+; --------------------
+setup_paging:
+    mov edi, 0x8000
+    xor eax, eax
+    mov ecx, 4096
+    rep stosb
+
+    ; PML4[0] -> PDPT
+    mov dword [0x8000], 0x9003
+
+    ; PDPT[0] -> PD
+    mov dword [0x9000], 0xA003
+
+    ; PD entries (2MB pages)
+    mov edi, 0xA000
+    mov eax, 0x83        ; Present | Write | PS
+    mov ecx, 512
+
+.map:
+    mov [edi], eax
+    add eax, 0x200000
+    add edi, 8
+    loop .map
+
+    mov eax, 0x8000
+    mov cr3, eax
+    ret
+
+; --------------------
+; 64-bit long mode
+; --------------------
+[BITS 64]
+long_mode:
+
+    ; LONG MODE (64-bit)
+    mov byte [0xB8000], 'L'
+    mov byte [0xB8001], 0x0A    ; light green
+
+
+    mov ax, 0x20
+    mov ds, ax
+    mov ss, ax
+
+    mov rsp, 0x900000
+
+.hang:
     hlt
+    jmp .hang
 
-; --- Global Descriptor Table (GDT) ---
-gdt_start:
-    ; Null Descriptor (Required)
-    dd 0x0
-    dd 0x0
+; --------------------
+; GDT
+; --------------------
+gdt:
+dq 0
 
-gdt_code: ; Code Segment Descriptor (Selector 0x08)
-    ; Limit (0xFFFF), Base (0x0)
-    dw 0xFFFF
-    dw 0x0
-    ; Base (0x0), Access (0x9A - Present, Ring 0, Executable, Readable), Flags (0xCF - 4KB Granularity, 32-bit)
-    db 0x0, 0x9A, 0xCF, 0x0
+; 32-bit code
+dq 0x00CF9A000000FFFF
+; 32-bit data
+dq 0x00CF92000000FFFF
+; 64-bit code
+dq 0x00209A0000000000
+; 64-bit data
+dq 0x0000920000000000
 
-gdt_data: ; Data Segment Descriptor (Selector 0x10)
-    ; Limit (0xFFFF), Base (0x0)
-    dw 0xFFFF
-    dw 0x0
-    ; Base (0x0), Access (0x92 - Present, Ring 0, Writable), Flags (0xCF - 4KB Granularity, 32-bit)
-    db 0x0, 0x92, 0xCF, 0x0
 
 gdt_end:
 
-gdt_descriptor:
-    dw gdt_end - gdt_start - 1 ; GDT Size - 1
-    dd gdt_start               ; GDT Address
+gdt_desc:
+dw gdt_end - gdt - 1
+dq gdt
 
-times 510 - ($ - $$) db 0 ; Fill the rest of the boot sector with 0s
-dw 0xAA55                 ; Boot Signature
+times 510-($-$$) db 0
+dw 0xAA55
