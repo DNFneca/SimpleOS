@@ -12,7 +12,7 @@ kernel.bin: $(OBJ) linker.ld
 	$(LD) $(LDFLAGS) -T linker.ld -o $@ $(OBJ)
 
 run: iso
-	qemu-system-i386 -cdrom myos.iso
+	qemu-system-i386 -cdrom myos.iso -boot d
 
 iso: kernel.bin
 	mkdir -p iso/boot/grub
