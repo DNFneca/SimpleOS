@@ -1,121 +1,63 @@
-#include <string.h>
-#include <stdlib.h>
+// kernel/main.c
+#include <stdint.h>
+#include <stddef.h>
 #include <stdbool.h>
-#include "../include/console.h"
-#include "../include/keyboard.h"
-#include "../include/readline.h"
-#include "../include/memory.h"
-#include "../include/gdt.h"
+#include "limine.h"
 
-#define MAX_ARGS 16
+// Set the base revision to 4 (recommended latest for the Limine protocol).
+__attribute__((used, section(".limine_requests")))
+static volatile uint64_t limine_base_revision[] = LIMINE_BASE_REVISION(4);
 
-__attribute__((section(".multiboot2_header")))
-const unsigned long multiboot2_header[] =
-{
-    // magic number
-    0xe85250d6,
-    // architecture: 0 = 32-bit i386
-    0x00000000,
-    // header length
-    24,
-    // checksum (magic + arch + length + checksum = 0)
-    -(0xe85250d6 + 0x00000000 + 24),
-
-    // end tag
-    0x00000000,
-    0x00000000
+// Request a framebuffer from the bootloader.
+__attribute__((used, section(".limine_requests")))
+static volatile struct limine_framebuffer_request framebuffer_request = {
+	.id = LIMINE_FRAMEBUFFER_REQUEST_ID,
+	.revision = 0
 };
 
-extern void init_commands();
-extern void execute_command(int argc, char* argv[]);
+__attribute__((used, section(".limine_requests_start")))
+static volatile uint64_t limine_requests_start_marker[] = LIMINE_REQUESTS_START_MARKER;
 
+__attribute__((used, section(".limine_requests_end")))
+static volatile uint64_t limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
 
-static inline uint8_t inb(uint16_t port) {
-    uint8_t r;
-    __asm__ volatile ("inb %1, %0" : "=a"(r) : "dN"(port));
-    return r;
+// Minimal implementations the compiler may emit.
+void *memcpy(void *restrict dest, const void *restrict src, size_t n) {
+	uint8_t *d = (uint8_t *)dest;
+	const uint8_t *s = (const uint8_t *)src;
+	for (size_t i = 0; i < n; i++)
+		d[i] = s[i];
+	return dest;
 }
 
-
-void wait_key(char* out) {
-    // Uses BIOS/keyboard buffer via port I/O
-    // This polling method works under GRUB
-    while (1) {
-        uint8_t status = inb(0x64);
-        if (status & 1) {
-            uint8_t scancode = inb(0x60);
-
-            if (scancode == 0x1C) { // Enter
-                *out = '\n';
-                return;
-            }
-
-            if (scancode >= 0x02 && scancode <= 0x0B) {
-                char c = "1234567890"[scancode - 0x02];
-                *out = c;
-                return;
-            }
-        }
-    }
+void *memset(void *s, int c, size_t n) {
+	uint8_t *p = (uint8_t *)s;
+	for (size_t i = 0; i < n; i++)
+		p[i] = (uint8_t)c;
+	return s;
 }
 
-int split_args(char* line, char** argv, int max_args) {
-    int argc = 0;
-    char* p = line;
-
-    while (*p != '\0') {
-        // Skip leading spaces
-        while (*p == ' ') p++;
-
-        if (*p == '\0') break;
-
-        // Start of argument
-        argv[argc++] = p;
-        if (argc >= max_args) break;
-
-        // Find end of argument
-        while (*p != '\0' && *p != ' ') p++;
-
-        if (*p == ' ') *p++ = '\0'; // null-terminate argument
-    }
-
-    return argc;
+static void hcf(void) {
+	for (;;) asm("hlt");
 }
 
-void _start() {
+// Entry point called by the Limine loader.
+void kmain(void) {
+	if (!LIMINE_BASE_REVISION_SUPPORTED(limine_base_revision))
+		hcf();
 
-    heap_init();
+	if (framebuffer_request.response == NULL ||
+		framebuffer_request.response->framebuffer_count < 1)
+		hcf();
 
-    console_init();
-    console_write("Simple OS\nType 'help'\n\n");
+	struct limine_framebuffer *fb =
+		framebuffer_request.response->framebuffers[0];
 
+	// Draw a simple pattern (white diagonal).
+	for (size_t y = 0; y < 100; y++) {
+		volatile uint32_t *pix = (uint32_t *)fb->address;
+		pix[y * (fb->pitch / 4) + y] = 0xFFFFFF;
+	}
 
-    char input[READLINE_BUFFER];
-    char* argv[MAX_ARGS];
-    int argc;
-
-    int8_t first = malloc(sizeof(int8_t));
-    int8_t second = malloc(sizeof(int8_t));
-    int8_t third = malloc(sizeof(int8_t));
-    int8_t fourth = malloc(sizeof(int8_t));
-
-    console_write((char*) &first);
-    console_write((char*) &second);
-    console_write((char*) &third);
-    console_write((char*) &fourth);
-
-    free(second);
-    free(third);
-    int16_t tf = malloc(sizeof(tf));
-
-    console_write((char*) &tf);
-
-    while (true) {
-        readline(input, READLINE_BUFFER);
-        if (kstrlen(input) == 0)
-            continue;
-
-        // Split input into args
-        argc = split_args(input, argv, MAX_ARGS);
-    }
+	hcf(); // Halt
 }
