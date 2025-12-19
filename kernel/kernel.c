@@ -2,7 +2,8 @@
 #include <stdint.h>
 #include <stddef.h>
 #include <stdbool.h>
-#include "limine.h"
+#include "../include/limine.h"
+#include "../include/display.h"
 
 // Set the base revision to 4 (recommended latest for the Limine protocol).
 __attribute__((used, section(".limine_requests")))
@@ -53,11 +54,21 @@ void kmain(void) {
 	struct limine_framebuffer *fb =
 		framebuffer_request.response->framebuffers[0];
 
-	// Draw a simple pattern (white diagonal).
-	for (size_t y = 0; y < 100; y++) {
-		volatile uint32_t *pix = (uint32_t *)fb->address;
-		pix[y * (fb->pitch / 4) + y] = 0xFFFFFF;
+    uint32_t *fb_ptr = (uint32_t *)fb->address;
+	for (uint64_t i = 0; i < (fb->height * fb->pitch) / 4; i++) {
+		fb_ptr[i] = 0x00000000;
 	}
+
+	uint64_t width = fb->width;
+	uint64_t height = fb->height;
+	uint16_t bpp = fb->bpp;  // bits per pixel
+	uint64_t pitch = fb->pitch;  // bytes per scanline
+	void *fb_addr = fb->address;
+
+	int center_x = fb->width / 2;
+	int center_y = fb->height / 2;
+
+	draw_star(fb, center_x, center_y, 100, 40, 0x00FFFF00);
 
 	hcf(); // Halt
 }

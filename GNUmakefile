@@ -130,13 +130,14 @@ iso_root: bin/$(OUTPUT) limine
 	cp bin/$(OUTPUT) $(ISO_ROOT)/boot/
 
 	cp limine.conf \
-	   $(LIMINE_DIR)/limine-bios.sys \
-	   $(LIMINE_DIR)/limine-bios-cd.bin \
-	   $(LIMINE_DIR)/limine-uefi-cd.bin \
+	   $(LIMINE_DIR)/bin/limine-bios.sys \
+	   $(LIMINE_DIR)/bin/limine-bios-cd.bin \
+	   $(LIMINE_DIR)/bin/limine-uefi-cd.bin \
 	   $(ISO_ROOT)/boot/limine/
 
-	cp $(LIMINE_DIR)/BOOTX64.EFI $(ISO_ROOT)/EFI/BOOT/
-	cp $(LIMINE_DIR)/BOOTIA32.EFI $(ISO_ROOT)/EFI/BOOT/
+
+	cp $(LIMINE_DIR)/bin/BOOTX64.EFI $(ISO_ROOT)/EFI/BOOT/
+	cp $(LIMINE_DIR)/bin/BOOTIA32.EFI $(ISO_ROOT)/EFI/BOOT/
 
 .PHONY: iso
 iso: iso_root
@@ -151,7 +152,7 @@ iso: iso_root
 		--protective-msdos-label \
 		$(ISO_ROOT) -o $(ISO_IMAGE)
 
-	./$(LIMINE_DIR)/limine bios-install $(ISO_IMAGE)
+	#./$(LIMINE_DIR) sudo limine bios-install ../$(ISO_IMAGE)
 
 .PHONY: run
 run: iso
