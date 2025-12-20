@@ -129,6 +129,8 @@ iso_root: bin/$(OUTPUT) limine
 
 	cp bin/$(OUTPUT) $(ISO_ROOT)/boot/
 
+	cp include/font.psf $(ISO_ROOT)/boot/
+
 	cp limine.conf \
 	   $(LIMINE_DIR)/bin/limine-bios.sys \
 	   $(LIMINE_DIR)/bin/limine-bios-cd.bin \
@@ -152,7 +154,7 @@ iso: iso_root
 		--protective-msdos-label \
 		$(ISO_ROOT) -o $(ISO_IMAGE)
 
-	#./$(LIMINE_DIR) sudo limine bios-install ../$(ISO_IMAGE)
+#	./$(LIMINE_DIR) sudo limine bios-install ../$(ISO_IMAGE)
 
 .PHONY: run
 run: iso
