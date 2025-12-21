@@ -5,6 +5,8 @@
 #include "../include/limine.h"
 #include "../include/display.h"
 #include "../include/psf.h"
+#include "../include/memory.h"
+#include "../include/string.h"
 
 // Set the base revision to 4 (recommended latest for the Limine protocol).
 __attribute__((used, section(".limine_requests")))
@@ -29,22 +31,6 @@ static volatile uint64_t limine_requests_start_marker[] = LIMINE_REQUESTS_START_
 __attribute__((used, section(".limine_requests_end")))
 static volatile uint64_t limine_requests_end_marker[] = LIMINE_REQUESTS_END_MARKER;
 
-// Minimal implementations the compiler may emit.
-void *memcpy(void *restrict dest, const void *restrict src, size_t n) {
-	uint8_t *d = (uint8_t *)dest;
-	const uint8_t *s = (const uint8_t *)src;
-	for (size_t i = 0; i < n; i++)
-		d[i] = s[i];
-	return dest;
-}
-
-void *memset(void *s, int c, size_t n) {
-	uint8_t *p = (uint8_t *)s;
-	for (size_t i = 0; i < n; i++)
-		p[i] = (uint8_t)c;
-	return s;
-}
-
 static void hcf(void) {
 	for (;;) asm("hlt");
 }
@@ -52,15 +38,26 @@ static void hcf(void) {
 static psf_font_t font;
 static int font_loaded = 0;
 
-void draw_test_rect(uint32_t *fb, uint32_t fb_width, uint32_t fb_pitch,
-					uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color) {
-	for (uint32_t row = 0; row < h; row++) {
-		for (uint32_t col = 0; col < w; col++) {
-			uint32_t fb_index = (y + row) * (fb_pitch / 4) + (x + col);
-			fb[fb_index] = color;
-		}
+void print_hex_uintptr_fixed(psf_font_t font, struct limine_framebuffer *fb, struct limine_framebuffer *fb_info, uintptr_t value, int y) {
+	static const char hex[] = "0123456789ABCDEF";
+
+    char str[20] = {'0', 'x'};
+
+
+	for (int i = (sizeof(uintptr_t) * 8) - 4, j = 2; i >= 0; i -= 4, j++) {
+		str[j] = hex[(value >> i) & 0XF];
 	}
+
+
+	psf_draw_string(&font, fb,
+					fb_info->width, fb_info->height, fb_info->pitch,
+					str,
+					10, y,
+					0x00FF00,    // green text
+					0x000000);
 }
+
+extern uint8_t _kernel_end[];
 
 // Entry point called by the Limine loader.
 void kmain(void) {
@@ -71,12 +68,17 @@ void kmain(void) {
 		framebuffer_request.response->framebuffer_count < 1)
 		hcf();
 
+//	TODO: Fix kernel end and the heap_init should work :pray:
+
+	uintptr_t heap_start = ((uintptr_t)_kernel_end + 0xFFF) & ~0xFFF;
+	heap_init((void *)heap_start, 1024 * 1024);
+
 	struct limine_framebuffer *fb =
-		framebuffer_request.response->framebuffers[0];
+			framebuffer_request.response->framebuffers[0];
 
-    struct limine_framebuffer *fb_info = framebuffer_request.response->framebuffers[0];
+	struct limine_framebuffer *fb_info = framebuffer_request.response->framebuffers[0];
 
-    uint32_t *fb_ptr = (uint32_t *)fb->address;
+	uint32_t *fb_ptr = (uint32_t *) fb->address;
 	for (uint64_t i = 0; i < (fb->height * fb->pitch) / 4; i++) {
 		fb_ptr[i] = 0x00000000;
 	}
@@ -89,10 +91,6 @@ void kmain(void) {
 
 	int center_x = fb->width / 2;
 	int center_y = fb->height / 2;
-
-	draw_line(fb, 0, 0,
-				   100, 100, 0xFF0000); // Red square
-
 
 	if (module_request.response != NULL && module_request.response->module_count > 0) {
 		// Find font.psf in the loaded modules
@@ -124,37 +122,36 @@ void kmain(void) {
 				if (psf_load(file->address, file->size, &font) == 0) {
 					font_loaded = 1;
 
-					draw_test_rect(fb, fb_info->width, fb_info->pitch,
-								   200, 100, 50, 50, 0x00FF00); // Green square
-
 				}
 				break;
 			}
 		}
 	}
 
-//	draw_star(fb, center_x, center_y, 100, 40, 0x00FFFF00); (USE FOR DEBUG LOL)
-
-
-	// Now you can draw text!
 	if (font_loaded) {
 		psf_draw_char(&font, fb, fb_info->width, fb_info->height, fb_info->pitch, 'c', 10, 10, 0xFFFFFF, 0x0000);
 
-//		psf_draw_string(&font, fb,
-//						fb_info->width, fb_info->height, fb_info->pitch,
-//						"Hello, World!\nThis is a PSF font!\nLine 3 here.",
-//						10, 10,      // x, y position
-//						0xFFFFFF,    // white text
-//						0x000000);   // black background
-//
-//		// Draw more text at different positions
-//		psf_draw_string(&font, fb,
-//						fb_info->width, fb_info->height, fb_info->pitch,
-//						"PSF fonts are cool!",
-//						10, 100,
-//						0x00FF00,    // green text
-//						0x000000);
+		psf_draw_string(&font, fb,
+						fb_info->width, fb_info->height, fb_info->pitch,
+						"Hello, World!\nThis is a PSF font!\nLine 3 here.",
+						10, 10,      // x, y position
+						0xFFFFFF,    // white text
+						0x000000);   // black background
+
+		// Draw more text at different positions
+		psf_draw_string(&font, fb,
+						fb_info->width, fb_info->height, fb_info->pitch,
+						"PSF fonts are cool!",
+						10, 100,
+						0x00FF00,    // green text
+						0x000000);
 	}
+    uint64_t uint_ptr;
+	for (int i = 0; i < 10; ++i) {
+		uint_ptr = (uint64_t)malloc(sizeof(uint64_t));
+        print_hex_uintptr_fixed(font, fb, fb_info, uint_ptr, i * 20 + 120);
+
+    }
 
 	hcf(); // Halt
 }

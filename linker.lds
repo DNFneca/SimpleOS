@@ -12,6 +12,7 @@ PHDRS {
 SECTIONS {
     . = 0xffffffff80000000;
 
+
     .limine_requests : {
         KEEP(*(.limine_requests_start))
         KEEP(*(.limine_requests))
@@ -32,5 +33,11 @@ SECTIONS {
         *(COMMON)
     } : data
 
+
     /DISCARD/ : { *(.eh_frame*) *(.note .note.*) }
+
+    . = 1M;
+
+    _kernel_end = .;
+
 }

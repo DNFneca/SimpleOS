@@ -1,15 +1,5 @@
 #include "../include/psf.h"
-
-static void* memcpy_custom(void* dest, const void* src, size_t n) {
-    unsigned char* d = (unsigned char*)dest;
-    const unsigned char* s = (const unsigned char*)src;
-    while (n--) {
-        *d++ = *s++;
-    }
-    return dest;
-}
-
-// TODO: psf_load supposedly works, draw char and/or string doesn't work, issue with drawing, draw_line() and draw_star() still work!!!
+#include "../include/display.h"
 
 int psf_load(const void* font_data, size_t font_size, psf_font_t* font) {
     if (!font_data || !font || font_size < sizeof(psf1_header_t)) {
@@ -78,35 +68,34 @@ void psf_draw_char(psf_font_t* font, uint32_t* framebuffer, uint32_t fb_width, u
 
     if (font->psf_version == 1) {
         for (uint32_t row = 0; row < font->glyph_height; row++) {
-            if (y + row >= fb_height) break;
 
             uint8_t glyph_byte = glyph[row];
 
             for (uint32_t col = 0; col < 8; col++) {
-                if (x + col >= fb_width) break;
 
                 uint8_t bit = 7 - col;
-                uint8_t pixel = (glyph_byte >> bit) & 1;
 
-                uint32_t fb_index = (y + row) * (fb_pitch / 4) + (x + col);
-                framebuffer[fb_index] = pixel ? fg_color : bg_color;
+                if ((glyph_byte >> bit) & 1) {
+                    put_pixel(framebuffer, x + col, y + row, fg_color);
+                } else {
+                    put_pixel(framebuffer, x + col, y + row, bg_color);
+                }
             }
         }
     } else {
         uint32_t bytes_per_row = (font->glyph_width + 7) / 8;
 
         for (uint32_t row = 0; row < font->glyph_height; row++) {
-            if (y + row >= fb_height) break;
-
             for (uint32_t col = 0; col < font->glyph_width; col++) {
-                if (x + col >= fb_width) break;
 
-                uint32_t byte_index = row * bytes_per_row + (col / 8);
-                uint8_t bit = 7 - (col % 8);
-                uint8_t pixel = (glyph[byte_index] >> bit) & 1;
+                uint32_t byte_index = row * bytes_per_row + (col >> 3);
+                uint8_t bit = 7 - (col & 7);
 
-                uint32_t fb_index = (y + row) * (fb_pitch / 4) + (x + col);
-                framebuffer[fb_index] = pixel ? fg_color : bg_color;
+                if ((glyph[byte_index] >> bit) & 1) {
+                    put_pixel(framebuffer, x + col, y + row, fg_color);
+                } else {
+                    put_pixel(framebuffer, x + col, y + row, bg_color);
+                }
             }
         }
     }
