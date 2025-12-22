@@ -1,4 +1,9 @@
 #include "../include/memory.h"
+#include <stdbool.h>
+
+// Static heap pointer - set once during heap_init
+static void *g_heap_start = NULL;
+static size_t g_heap_size = 0;
 
 void *memcpy(void *dest, const void *src, size_t n) {
     uint8_t *d = dest;
@@ -60,81 +65,73 @@ void slab_free(slab_t *slab, void *obj) {
     slab->free_list = obj;
 }
 
-static void split_block(heap_block_t *block, size_t size) {
-    if (block->size <= size + sizeof(heap_block_t))
-        return;
-
-    heap_block_t *new_block =
-            (heap_block_t *)((uint8_t *)block + sizeof(heap_block_t) + size);
-
-    new_block->size = block->size - size - sizeof(heap_block_t);
-    new_block->free = 1;
-    new_block->next = block->next;
-    new_block->prev = block;
-
-    if (new_block->next)
-        new_block->next->prev = new_block;
-
-    block->size = size;
-    block->next = new_block;
-}
-
-static void coalesce(heap_block_t *block) {
-    // Merge with next
-    if (block->next && block->next->free) {
-        block->size += sizeof(heap_block_t) + block->next->size;
-        block->next = block->next->next;
-        if (block->next)
-            block->next->prev = block;
-    }
-
-    // Merge with previous
-    if (block->prev && block->prev->free) {
-        block->prev->size += sizeof(heap_block_t) + block->size;
-        block->prev->next = block->next;
-        if (block->next)
-            block->next->prev = block->prev;
-    }
-}
-
-static void *heap_end = NULL;
-
 void heap_init(void *heap_start, size_t heap_size) {
-    heap_head = (heap_block_t *)heap_start;
-    heap_head->size = heap_size - BLOCK_SIZE;
-    heap_head->free = 1;
-    heap_head->next = NULL;
+    if (heap_start == NULL || heap_size < BLOCK_SIZE) {
+        return; // Invalid parameters
+    }
 
-    heap_end = (uint8_t *)heap_start + heap_size;
+    // Store heap start globally
+    g_heap_start = heap_start;
+    g_heap_size = heap_size;
+
+    heap_block_t *initial_block = (heap_block_t *)heap_start;
+    initial_block->size = heap_size;
+    initial_block->free = true;
+    initial_block->next = NULL;
+    initial_block->prev = NULL;
 }
 
 static heap_block_t *find_free_block(size_t size) {
-    heap_block_t *current = heap_head;
-    while (current) {
-        if (current->free && current->size >= size)
+    heap_block_t *current = (heap_block_t *)g_heap_start;
+
+    while (current != NULL) {
+        if (current->free && current->size >= size) {
             return current;
+        }
         current = current->next;
     }
+
     return NULL;
 }
 
-static int slab_index(size_t size) {
-    for (int i = 0; i < SLAB_COUNT; i++) {
-        if (size <= slab_sizes[i])
-            return i;
+static void split_block(heap_block_t *block, size_t size) {
+    // Only split if remainder is large enough for header + some data
+    if (block->size >= size + BLOCK_SIZE + ALIGN_SIZE) {
+        heap_block_t *new_block = (heap_block_t *)((uint8_t *)block + size);
+        new_block->size = block->size - size;
+        new_block->free = true;
+        new_block->next = block->next;
+        new_block->prev = block;
+
+        if (block->next != NULL) {
+            block->next->prev = new_block;
+        }
+
+        block->next = new_block;
+        block->size = size;
     }
-    return -1;
 }
 
-void *heap_malloc(size_t size) {
-    heap_block_t *block = find_free_block(size);
-    if (!block)
-        return NULL; // later: grow heap via paging
+static void coalesce(heap_block_t *block) {
+    // Coalesce with next block
+    if (block->next != NULL && block->next->free) {
+        block->size += block->next->size;
+        block->next = block->next->next;
 
-    block->free = 0;
-    split_block(block, size);
+        if (block->next != NULL) {
+            block->next->prev = block;
+        }
+    }
 
-    return (uint8_t *)block + sizeof(heap_block_t);
+    // Coalesce with previous block
+    if (block->prev != NULL && block->prev->free) {
+        block->prev->size += block->size;
+        block->prev->next = block->next;
+
+        if (block->next != NULL) {
+            block->next->prev = block->prev;
+        }
+    }
 }
 
 void *slab_malloc(size_t size) {
@@ -147,7 +144,7 @@ void *slab_malloc(size_t size) {
     // No free objects → allocate a new slab page
     if (!slab->free_list) {
         size_t page_size = 4096;
-        uint8_t *page = heap_malloc(page_size);
+        uint8_t *page = malloc(page_size);  // Use malloc instead of heap_malloc
         if (!page)
             return NULL;
 
@@ -167,17 +164,32 @@ void *slab_malloc(size_t size) {
 }
 
 void *malloc(size_t size) {
-    if (size == 0)
+    if (size == 0) return NULL;
+
+    // Check if heap is initialized
+    if (g_heap_start == NULL) {
         return NULL;
+    }
 
-    size = ALIGN8(size);
+    // Align and add header size
+    size_t total_size = ALIGN16(size + BLOCK_SIZE);
 
-    if (size <= SLAB_MAX_SIZE)
-        return slab_malloc(size);
+    // Find suitable free block
+    heap_block_t *block = find_free_block(total_size);
 
-    return heap_malloc(size);
+    if (block == NULL) {
+        return NULL; // Out of memory
+    }
+
+    // Split block if possible
+    split_block(block, total_size);
+
+    // Mark as used
+    block->free = false;
+
+    // Return pointer after header
+    return (void *)((uint8_t *)block + BLOCK_SIZE);
 }
-
 
 void *calloc(size_t nmemb, size_t size) {
     size_t total = nmemb * size;
@@ -198,29 +210,54 @@ void *realloc(void *ptr, size_t size) {
         return NULL;
     }
 
-    heap_block_t *block =
-            (heap_block_t *)((uint8_t *)ptr - BLOCK_SIZE);
+    heap_block_t *block = (heap_block_t *)((uint8_t *)ptr - BLOCK_SIZE);
 
-    if (block->size >= size)
+    if (block->size - BLOCK_SIZE >= size)
         return ptr;
 
     void *new_ptr = malloc(size);
     if (!new_ptr)
         return NULL;
 
-    memcpy(new_ptr, ptr, block->size);
+    memcpy(new_ptr, ptr, block->size - BLOCK_SIZE);
     free(ptr);
 
     return new_ptr;
 }
 
 void free(void *ptr) {
-    if (!ptr)
-        return;
+    if (ptr == NULL) return;
 
-    heap_block_t *block =
-            (heap_block_t *)((uint8_t *)ptr - BLOCK_SIZE);
+    // Get block header
+    heap_block_t *block = (heap_block_t *)((uint8_t *)ptr - BLOCK_SIZE);
 
-    block->free = 1;
+    // Mark as free
+    block->free = true;
+
+    // Coalesce with adjacent free blocks
     coalesce(block);
+}
+
+void heap_stats(heap_stats_t *stats) {
+    stats->total_blocks = 0;
+    stats->free_blocks = 0;
+    stats->used_blocks = 0;
+    stats->total_free_memory = 0;
+    stats->total_used_memory = 0;
+
+    heap_block_t *current = (heap_block_t *)g_heap_start;
+
+    while (current != NULL) {
+        stats->total_blocks++;
+
+        if (current->free) {
+            stats->free_blocks++;
+            stats->total_free_memory += current->size - BLOCK_SIZE;
+        } else {
+            stats->used_blocks++;
+            stats->total_used_memory += current->size - BLOCK_SIZE;
+        }
+
+        current = current->next;
+    }
 }

@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <stddef.h>
+#include "limine.h"
 
 #define PSF1_MAGIC 0x0436
 #define PSF2_MAGIC 0x864ab572
@@ -33,5 +34,5 @@ typedef struct {
 } psf_font_t;
 
 int psf_load(const void* font_data, size_t font_size, psf_font_t* font);
-void psf_draw_char(psf_font_t* font, uint32_t* framebuffer, uint32_t fb_width, uint32_t fb_height, uint32_t fb_pitch, char c, uint32_t x, uint32_t y, uint32_t fg_color, uint32_t bg_color);
-void psf_draw_string(psf_font_t* font, uint32_t* framebuffer, uint32_t fb_width, uint32_t fb_height, uint32_t fb_pitch, const char* str, uint32_t x, uint32_t y, uint32_t fg_color, uint32_t bg_color);
+void psf_draw_char(psf_font_t* font, struct limine_framebuffer *framebuffer, uint32_t fb_width, uint32_t fb_height, uint32_t fb_pitch, char c, uint32_t x, uint32_t y, uint32_t fg_color, uint32_t bg_color);
+void psf_draw_string(psf_font_t* font, struct limine_framebuffer *framebuffer, uint32_t fb_width, uint32_t fb_height, uint32_t fb_pitch, const char* str, uint32_t x, uint32_t y, uint32_t fg_color, uint32_t bg_color);

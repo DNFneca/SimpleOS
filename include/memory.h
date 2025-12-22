@@ -7,10 +7,12 @@
 
 #define MAX_CPUS 64
 #define ALIGN8(x) (((x) + 7) & ~7)
+#define ALIGN16(x) (((x) + 15) & ~15)
 #define BLOCK_SIZE sizeof(heap_block_t)
 #define MAX_CPUS 64
 #define SLAB_MAX_SIZE 256
 #define SLAB_COUNT 6
+#define ALIGN_SIZE 16
 
 static const size_t slab_sizes[SLAB_COUNT] = {
         8, 16, 32, 64, 128, 256
@@ -27,6 +29,15 @@ typedef struct heap_block {
     struct heap_block *next;
     struct heap_block *prev;
 } heap_block_t;
+
+
+typedef struct {
+    size_t total_blocks;
+    size_t free_blocks;
+    size_t used_blocks;
+    size_t total_free_memory;
+    size_t total_used_memory;
+} heap_stats_t;
 
 
 typedef struct cpu_heap {
@@ -48,6 +59,8 @@ void *memmove(void *dest, const void *src, size_t n);
 int memcmp(const void *a, const void *b, size_t n);
 
 void heap_init(void *heap_start, size_t heap_size);
+
+void heap_stats(heap_stats_t *stats);
 
 void *malloc(size_t size);
 void *calloc(size_t nmemb, size_t size);

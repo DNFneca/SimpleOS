@@ -20,9 +20,21 @@ static volatile struct limine_module_request module_request = {
 };
 
 __attribute__((used, section(".limine_requests")))
+static volatile struct limine_memmap_request memmap_request = {
+		.id = LIMINE_MEMMAP_REQUEST_ID,
+		.revision = 0
+};
+
+__attribute__((used, section(".limine_requests")))
+static volatile struct limine_hhdm_request hhdm_request = {
+		.id = LIMINE_HHDM_REQUEST_ID,
+		.revision = 0
+};
+
+__attribute__((used, section(".limine_requests")))
 static volatile struct limine_framebuffer_request framebuffer_request = {
-        .id = LIMINE_FRAMEBUFFER_REQUEST_ID,
-        .revision = 0
+		.id = LIMINE_FRAMEBUFFER_REQUEST_ID,
+		.revision = 0
 };
 
 __attribute__((used, section(".limine_requests_start")))
@@ -57,7 +69,7 @@ void print_hex_uintptr_fixed(psf_font_t font, struct limine_framebuffer *fb, str
 					0x000000);
 }
 
-extern uint8_t _kernel_end[];
+extern uint8_t _kernel_end;
 
 // Entry point called by the Limine loader.
 void kmain(void) {
@@ -70,8 +82,8 @@ void kmain(void) {
 
 //	TODO: Fix kernel end and the heap_init should work :pray:
 
-	uintptr_t heap_start = ((uintptr_t)_kernel_end + 0xFFF) & ~0xFFF;
-	heap_init((void *)heap_start, 1024 * 1024);
+//	uintptr_t heap_start = ((uintptr_t)_kernel_end + 0xFFF) & ~0xFFF;
+//	heap_init((void *)heap_start, 1024 * 1024);
 
 	struct limine_framebuffer *fb =
 			framebuffer_request.response->framebuffers[0];
@@ -128,6 +140,7 @@ void kmain(void) {
 		}
 	}
 
+
 	if (font_loaded) {
 		psf_draw_char(&font, fb, fb_info->width, fb_info->height, fb_info->pitch, 'c', 10, 10, 0xFFFFFF, 0x0000);
 
@@ -146,12 +159,50 @@ void kmain(void) {
 						0x00FF00,    // green text
 						0x000000);
 	}
-    uint64_t uint_ptr;
-	for (int i = 0; i < 10; ++i) {
-		uint_ptr = (uint64_t)malloc(sizeof(uint64_t));
-        print_hex_uintptr_fixed(font, fb, fb_info, uint_ptr, i * 20 + 120);
 
-    }
+	struct limine_memmap_response *memmap = memmap_request.response;
+
+	if (memmap == NULL) hcf();
+
+	void* heap_start = NULL;
+	size_t heap_size = 1024 * 1024; // 1MB
+
+	for (uint64_t i = 0; i < memmap->entry_count; i++) {
+		struct limine_memmap_entry *entry = memmap->entries[i];
+
+		// Find usable memory after kernel
+		if (entry->type == LIMINE_MEMMAP_USABLE && entry->length >= heap_size) {
+			// Use physical address + HHDM offset
+			heap_start = (void *)(entry->base + hhdm_request.response->offset);
+			break;
+		}
+	}
+
+	if (heap_start == NULL) hcf();
+
+	heap_init(heap_start, heap_size);
+
+	char *buffer = malloc(256);
+
+	// TODO: Finish console.c and .h not fully done should use the limine_framebuffer to write to screen probably but memory management is done i think!
+
+	// Use buffer...
+	print_hex_uintptr_fixed(font, fb, fb_info, buffer, 320);
+
+	// Free memory
+	free(buffer);
+
+	// Check stats (optional)
+	heap_stats_t stats;
+	heap_stats(&stats);
+
+	psf_draw_string(&font, fb,
+					fb_info->width, fb_info->height, fb_info->pitch,
+					(int) stats.total_used_memory,
+					50, 100,
+					0x00FF00,    // green text
+					0x000000);
+
 
 	hcf(); // Halt
 }
